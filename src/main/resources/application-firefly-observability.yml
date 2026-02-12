@@ -1,0 +1,112 @@
+## Firefly Observability — Default Spring Profile Configuration
+## Included automatically by fireflyframework-observability auto-configuration.
+## Override any property in your application's own application.yml.
+##
+## OTLP Backend: Designed for the open-source OpenTelemetry Collector (contrib distribution).
+##   Docker image: otel/opentelemetry-collector-contrib
+##   Default ports:
+##     - 4317: OTLP/gRPC receiver (default, recommended)
+##     - 4318: OTLP/HTTP receiver (fallback)
+##   Switch transport via: OTEL_EXPORTER_OTLP_PROTOCOL=grpc|http/protobuf
+
+## ---------------------------------------------------------------------------
+## Firefly Observability Properties
+## ---------------------------------------------------------------------------
+firefly:
+  observability:
+    metrics:
+      enabled: true
+      prefix: firefly
+      exporter: PROMETHEUS               # PROMETHEUS (default), OTLP, or BOTH — no POM changes needed
+    tracing:
+      enabled: true
+      bridge: OTEL                         # OTEL (default) or BRAVE — switch via config, no POM changes
+      sampling-probability: 1.0            # Override in production (e.g. 0.1 for 10% sampling)
+      propagation-type: W3C               # W3C (default) or B3; composite propagator always includes both
+      baggage-fields:
+        - X-Transaction-Id
+    health:
+      enabled: true
+      kubernetes-probes: true
+    logging:
+      enabled: true
+      structured-format: logstash
+    context-propagation:
+      reactor-hooks-enabled: true
+
+## ---------------------------------------------------------------------------
+## Spring Boot Actuator
+## ---------------------------------------------------------------------------
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+      show-components: always
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,db,diskSpace
+  ## Metrics Export
+  ## Controlled by firefly.observability.metrics.exporter (PROMETHEUS, OTLP, or BOTH).
+  ## The EnvironmentPostProcessor sets these enable flags automatically.
+  prometheus:
+    metrics:
+      export:
+        enabled: true                    # Overridden by EnvironmentPostProcessor based on exporter property
+  metrics:
+    tags:
+      application: ${spring.application.name:unknown}
+  tracing:
+    enabled: ${firefly.observability.tracing.enabled:true}
+    sampling:
+      probability: ${firefly.observability.tracing.sampling-probability:1.0}
+    propagation:
+      type: W3C,B3
+
+  ## OTLP Export — targets open-source otel-collector-contrib
+  ## Both gRPC and HTTP senders are on the classpath. Switch via env var or property.
+  ##
+  ## Default: gRPC on port 4317 (persistent connections, binary framing, multiplexing)
+  ## Fallback: HTTP/protobuf on port 4318 (simpler, works through HTTP proxies/load balancers)
+  ##
+  ## Override examples:
+  ##   OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf  → switches traces to HTTP on port 4318
+  ##   OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector.monitoring:4317  → custom collector
+  ##   OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://tempo:4317  → traces to Tempo directly
+  ##   OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://mimir:4318/v1/metrics  → metrics to Mimir
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4317}}
+      transport: ${OTEL_EXPORTER_OTLP_PROTOCOL:grpc}
+    metrics:
+      export:
+        enabled: false                   # Overridden by EnvironmentPostProcessor based on exporter property
+        url: ${OTEL_EXPORTER_OTLP_METRICS_ENDPOINT:http://localhost:4318/v1/metrics}
+
+## ---------------------------------------------------------------------------
+## Logging
+## ---------------------------------------------------------------------------
+logging:
+  structured:
+    format:
+      console: ${firefly.observability.logging.structured-format:logstash}
+  level:
+    org.fireflyframework: DEBUG
+    root: INFO
+
+## ---------------------------------------------------------------------------
+## Server & Lifecycle
+## ---------------------------------------------------------------------------
+server:
+  shutdown: graceful
+
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s

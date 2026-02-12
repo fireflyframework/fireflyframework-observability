@@ -1,0 +1,170 @@
+{
+  "groups": [
+    {
+      "name": "firefly.observability",
+      "description": "Unified observability configuration for the Firefly Framework."
+    },
+    {
+      "name": "firefly.observability.metrics",
+      "description": "Metrics configuration (Prometheus/OTLP export)."
+    },
+    {
+      "name": "firefly.observability.tracing",
+      "description": "Distributed tracing configuration (OpenTelemetry/Brave)."
+    },
+    {
+      "name": "firefly.observability.health",
+      "description": "Health indicator and Kubernetes probes configuration."
+    },
+    {
+      "name": "firefly.observability.logging",
+      "description": "Structured logging configuration."
+    },
+    {
+      "name": "firefly.observability.context-propagation",
+      "description": "Reactive context propagation configuration (Reactor <-> ThreadLocal bridge)."
+    }
+  ],
+  "properties": [
+    {
+      "name": "firefly.observability.metrics.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Enable or disable all Firefly metrics collection. When disabled, FireflyMetricsSupport methods become no-ops.",
+      "defaultValue": true
+    },
+    {
+      "name": "firefly.observability.metrics.prefix",
+      "type": "java.lang.String",
+      "description": "Root prefix for all Firefly metrics. Metrics are named as {prefix}.{module}.{metric}.",
+      "defaultValue": "firefly"
+    },
+    {
+      "name": "firefly.observability.metrics.exporter",
+      "type": "org.fireflyframework.observability.FireflyObservabilityProperties$MetricsExporter",
+      "description": "Metrics exporter backend. Both Prometheus and OTLP registries ship on the classpath; this property controls which one is active. PROMETHEUS (default) enables /actuator/prometheus scrape endpoint. OTLP enables push-based export to otel-collector-contrib. BOTH enables both simultaneously.",
+      "defaultValue": "PROMETHEUS"
+    },
+    {
+      "name": "firefly.observability.tracing.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Enable or disable distributed tracing. When disabled, the tracing bridge EnvironmentPostProcessor is skipped.",
+      "defaultValue": true
+    },
+    {
+      "name": "firefly.observability.tracing.bridge",
+      "type": "org.fireflyframework.observability.FireflyObservabilityProperties$TracingBridge",
+      "description": "Tracing bridge implementation. Both bridges ship on the classpath; this property controls which one is active via auto-configuration exclusions. OTEL uses OpenTelemetry with OTLP export and W3C propagation. BRAVE uses Brave/Zipkin with B3 propagation.",
+      "defaultValue": "OTEL"
+    },
+    {
+      "name": "firefly.observability.tracing.sampling-probability",
+      "type": "java.lang.Double",
+      "description": "Probability for sampling traces (0.0 to 1.0). Set to 1.0 to trace all requests (development), lower in production (e.g. 0.1 for 10%).",
+      "defaultValue": 1.0
+    },
+    {
+      "name": "firefly.observability.tracing.propagation-type",
+      "type": "org.fireflyframework.observability.FireflyObservabilityProperties$PropagationType",
+      "description": "Trace context propagation format. W3C TraceContext (default) or B3. A composite propagator is always configured to support both formats regardless of this setting.",
+      "defaultValue": "W3C"
+    },
+    {
+      "name": "firefly.observability.tracing.baggage-fields",
+      "type": "java.util.List<java.lang.String>",
+      "description": "Custom baggage field names propagated across service boundaries via trace context headers. These fields are available in MDC for logging in downstream services.",
+      "defaultValue": ["X-Transaction-Id"]
+    },
+    {
+      "name": "firefly.observability.health.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Enable or disable Firefly health indicator support and health-to-metrics bridge.",
+      "defaultValue": true
+    },
+    {
+      "name": "firefly.observability.health.kubernetes-probes",
+      "type": "java.lang.Boolean",
+      "description": "Configure Kubernetes liveness, readiness, and startup probe groups. Liveness includes only livenessState (never checks DB). Readiness includes readinessState, db, and diskSpace.",
+      "defaultValue": true
+    },
+    {
+      "name": "firefly.observability.logging.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Enable or disable Firefly structured logging auto-configuration.",
+      "defaultValue": true
+    },
+    {
+      "name": "firefly.observability.logging.structured-format",
+      "type": "java.lang.String",
+      "description": "Structured logging format for console output. Supported values: logstash, ecs, gelf. Maps to Spring Boot's logging.structured.format.console property.",
+      "defaultValue": "logstash"
+    },
+    {
+      "name": "firefly.observability.context-propagation.reactor-hooks-enabled",
+      "type": "java.lang.Boolean",
+      "description": "Enable Reactor's automatic context propagation via Hooks.enableAutomaticContextPropagation(). This bridges ThreadLocal values (MDC, trace context) into Reactor Context across thread boundaries. Disabling this requires manual MDC management in reactive chains.",
+      "defaultValue": true
+    }
+  ],
+  "hints": [
+    {
+      "name": "firefly.observability.metrics.exporter",
+      "values": [
+        {
+          "value": "PROMETHEUS",
+          "description": "Prometheus scrape endpoint (default). Exposes /actuator/prometheus for pull-based monitoring. Standard for Prometheus, Grafana, Thanos, Mimir."
+        },
+        {
+          "value": "OTLP",
+          "description": "OTLP push-based export. Sends metrics to otel-collector-contrib via OTLP protocol. No scrape endpoint exposed."
+        },
+        {
+          "value": "BOTH",
+          "description": "Both Prometheus scrape and OTLP push enabled simultaneously. Useful during migration or when multiple backends consume metrics."
+        }
+      ]
+    },
+    {
+      "name": "firefly.observability.tracing.bridge",
+      "values": [
+        {
+          "value": "OTEL",
+          "description": "OpenTelemetry bridge (default). Uses OTLP export, W3C TraceContext propagation. Compatible with Jaeger, Tempo, Datadog, New Relic."
+        },
+        {
+          "value": "BRAVE",
+          "description": "Brave bridge. Uses Zipkin reporter, B3 propagation. For backward compatibility with Zipkin-based ecosystems."
+        }
+      ]
+    },
+    {
+      "name": "firefly.observability.tracing.propagation-type",
+      "values": [
+        {
+          "value": "W3C",
+          "description": "W3C TraceContext propagation (recommended). Industry standard supported by all modern tracing backends."
+        },
+        {
+          "value": "B3",
+          "description": "B3 propagation. Used by Zipkin ecosystem. A composite propagator always includes both W3C and B3."
+        }
+      ]
+    },
+    {
+      "name": "firefly.observability.logging.structured-format",
+      "values": [
+        {
+          "value": "logstash",
+          "description": "Logstash JSON format (default). Compatible with ELK stack, Datadog, CloudWatch Logs."
+        },
+        {
+          "value": "ecs",
+          "description": "Elastic Common Schema format. Native for Elastic Observability."
+        },
+        {
+          "value": "gelf",
+          "description": "Graylog Extended Log Format. For Graylog-based log aggregation."
+        }
+      ]
+    }
+  ]
+}
