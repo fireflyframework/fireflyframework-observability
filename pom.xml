@@ -7,12 +7,12 @@
     <parent>
         <groupId>org.fireflyframework</groupId>
         <artifactId>fireflyframework-parent</artifactId>
-        <version>26.02.05</version>
+        <version>26.02.06</version>
         <relativePath/>
     </parent>
 
     <artifactId>fireflyframework-observability</artifactId>
-    <version>26.02.05</version>
+    <version>26.02.06</version>
     <packaging>jar</packaging>
 
     <name>Firefly Framework - Observability</name>
