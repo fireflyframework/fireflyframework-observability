@@ -1,6 +1,7 @@
 package org.fireflyframework.observability;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.validation.annotation.Validated;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -31,6 +32,7 @@ import java.util.List;
  *       reactor-hooks-enabled: true
  * }</pre>
  */
+@Validated
 @ConfigurationProperties(prefix = "firefly.observability")
 public class FireflyObservabilityProperties {
 
