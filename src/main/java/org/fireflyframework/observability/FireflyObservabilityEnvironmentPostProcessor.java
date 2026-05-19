@@ -1,13 +1,18 @@
 package org.fireflyframework.observability;
 
+import org.springframework.beans.factory.config.YamlPropertiesFactoryBean;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.env.EnvironmentPostProcessor;
 import org.springframework.core.Ordered;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.MapPropertySource;
+import org.springframework.core.env.PropertiesPropertySource;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.Resource;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Properties;
 
 /**
  * Configures observability backends at startup based on Firefly properties.
@@ -56,6 +61,8 @@ public class FireflyObservabilityEnvironmentPostProcessor implements Environment
     private static final String OTLP_METRICS_ENABLED = "management.otlp.metrics.export.enabled";
 
     private static final String PROPERTY_SOURCE_NAME = "fireflyObservabilityPostProcessor";
+    private static final String DEFAULTS_SOURCE_NAME = "fireflyObservabilityDefaults";
+    private static final String DEFAULTS_YAML = "application-firefly-observability.yml";
 
     // Spring Boot actuator auto-configuration classes for each tracing bridge.
     // Both current (3.4+) and deprecated (pre-3.4) class names are excluded for maximum safety.
@@ -72,15 +79,48 @@ public class FireflyObservabilityEnvironmentPostProcessor implements Environment
 
     @Override
     public void postProcessEnvironment(ConfigurableEnvironment environment, SpringApplication application) {
-        Map<String, Object> props = new LinkedHashMap<>();
+        // 1. Load framework default observability properties (actuator endpoints,
+        //    health groups, OTLP endpoints, etc.) — added with LOWEST precedence so the
+        //    user's own application.yml always wins.
+        loadFrameworkDefaults(environment);
 
+        // 2. Resolve the active tracing bridge & metrics exporter and install the
+        //    corresponding Spring Boot auto-config exclusions / enable flags with
+        //    HIGHEST precedence.
+        Map<String, Object> props = new LinkedHashMap<>();
         configureTracingBridge(environment, props);
         configureMetricsExporter(environment, props);
-
         if (!props.isEmpty()) {
             environment.getPropertySources().addFirst(
                     new MapPropertySource(PROPERTY_SOURCE_NAME, props));
         }
+    }
+
+    /**
+     * Loads {@code application-firefly-observability.yml} from the classpath and adds
+     * its contents to the environment with the lowest precedence so that any property
+     * set by the host application overrides them.
+     * <p>
+     * If the resource is missing or unreadable, the method silently no-ops — the
+     * framework still works, the host just won't get the default endpoint exposure,
+     * tracing settings, OTLP endpoints, etc., until they opt in explicitly.
+     */
+    private void loadFrameworkDefaults(ConfigurableEnvironment environment) {
+        if (environment.getPropertySources().contains(DEFAULTS_SOURCE_NAME)) {
+            return; // idempotent — never double-load if invoked twice
+        }
+        Resource resource = new ClassPathResource(DEFAULTS_YAML);
+        if (!resource.exists()) {
+            return;
+        }
+        YamlPropertiesFactoryBean yaml = new YamlPropertiesFactoryBean();
+        yaml.setResources(resource);
+        Properties properties = yaml.getObject();
+        if (properties == null || properties.isEmpty()) {
+            return;
+        }
+        environment.getPropertySources().addLast(
+                new PropertiesPropertySource(DEFAULTS_SOURCE_NAME, properties));
     }
 
     private void configureTracingBridge(ConfigurableEnvironment environment, Map<String, Object> props) {
