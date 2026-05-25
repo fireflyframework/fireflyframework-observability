@@ -48,6 +48,9 @@ management:
       show-components: always
       probes:
         enabled: true
+      # Required so apps without a db (e.g. callbacks-web non-r2dbc tests) do not
+      # crash startup when "db" is missing from the readiness group.
+      validate-group-membership: false
       group:
         liveness:
           include: livenessState
