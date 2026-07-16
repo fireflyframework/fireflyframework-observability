@@ -37,6 +37,13 @@ import java.util.Properties;
  *   <li>{@code OTLP} — disables Prometheus scrape, enables OTLP push</li>
  *   <li>{@code BOTH} — enables both simultaneously</li>
  * </ul>
+ *
+ * <h3>OTLP Transport Translation</h3>
+ * Translates the OpenTelemetry {@code OTEL_EXPORTER_OTLP_PROTOCOL} env var
+ * ({@code grpc | http/protobuf | http/json}) into Spring's
+ * {@code management.otlp.tracing.transport} enum ({@code GRPC | HTTP}), moving the
+ * default endpoint to the HTTP port when HTTP is selected. See
+ * {@link #configureOtlpTracingTransport}.
  * <p>
  * Runs at {@link Ordered#LOWEST_PRECEDENCE} to ensure {@code application.yml}
  * properties are already resolved. Existing user-defined
@@ -59,6 +66,15 @@ public class FireflyObservabilityEnvironmentPostProcessor implements Environment
     private static final String EXCLUDE_PROPERTY = "spring.autoconfigure.exclude";
     private static final String PROMETHEUS_ENABLED = "management.prometheus.metrics.export.enabled";
     private static final String OTLP_METRICS_ENABLED = "management.otlp.metrics.export.enabled";
+    private static final String OTLP_TRACING_TRANSPORT = "management.otlp.tracing.transport";
+    private static final String OTLP_TRACING_ENDPOINT = "management.otlp.tracing.endpoint";
+
+    // --- OpenTelemetry SDK environment variables ---
+    private static final String OTEL_PROTOCOL_ENV = "OTEL_EXPORTER_OTLP_PROTOCOL";
+    private static final String OTEL_TRACES_ENDPOINT_ENV = "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT";
+    private static final String OTEL_ENDPOINT_ENV = "OTEL_EXPORTER_OTLP_ENDPOINT";
+    // Default OTLP/HTTP traces endpoint (gRPC lives on :4317, HTTP on :4318 with the /v1/traces path).
+    private static final String DEFAULT_HTTP_TRACES_ENDPOINT = "http://localhost:4318/v1/traces";
 
     private static final String PROPERTY_SOURCE_NAME = "fireflyObservabilityPostProcessor";
     private static final String DEFAULTS_SOURCE_NAME = "fireflyObservabilityDefaults";
@@ -90,6 +106,7 @@ public class FireflyObservabilityEnvironmentPostProcessor implements Environment
         Map<String, Object> props = new LinkedHashMap<>();
         configureTracingBridge(environment, props);
         configureMetricsExporter(environment, props);
+        configureOtlpTracingTransport(environment, props);
         if (!props.isEmpty()) {
             environment.getPropertySources().addFirst(
                     new MapPropertySource(PROPERTY_SOURCE_NAME, props));
@@ -173,6 +190,45 @@ public class FireflyObservabilityEnvironmentPostProcessor implements Environment
                 props.put(OTLP_METRICS_ENABLED, "false");
             }
         }
+    }
+
+    /**
+     * Translates the OpenTelemetry {@code OTEL_EXPORTER_OTLP_PROTOCOL} environment variable
+     * into Spring Boot's {@code management.otlp.tracing.transport} enum.
+     * <p>
+     * The OTel spec values are {@code grpc | http/protobuf | http/json}, but Spring's
+     * {@code Transport} enum only accepts {@code GRPC | HTTP}. Binding the raw spec value
+     * straight to the enum (as the bundled YAML previously did) fails to bind
+     * {@code http/protobuf} and crashes context initialization. We normalize any
+     * {@code http/*} protocol to {@code http} here.
+     * <p>
+     * gRPC and HTTP also listen on different ports/paths ({@code :4317} vs
+     * {@code :4318/v1/traces}). When HTTP is selected without an explicit endpoint, we move
+     * the default off the gRPC port so the exporter does not POST to a gRPC listener at
+     * runtime. An explicit {@code OTEL_EXPORTER_OTLP_(TRACES_)ENDPOINT} always wins.
+     * <p>
+     * No-ops when the protocol variable is unset, leaving the YAML {@code grpc} default in place.
+     */
+    private void configureOtlpTracingTransport(ConfigurableEnvironment environment, Map<String, Object> props) {
+        String protocol = environment.getProperty(OTEL_PROTOCOL_ENV);
+        if (protocol == null || protocol.isBlank()) {
+            return;
+        }
+        boolean http = protocol.trim().toLowerCase().startsWith("http");
+        props.put(OTLP_TRACING_TRANSPORT, http ? "http" : "grpc");
+
+        if (http && !hasExplicitOtlpEndpoint(environment)) {
+            props.put(OTLP_TRACING_ENDPOINT, DEFAULT_HTTP_TRACES_ENDPOINT);
+        }
+    }
+
+    private boolean hasExplicitOtlpEndpoint(ConfigurableEnvironment environment) {
+        return isSet(environment.getProperty(OTEL_TRACES_ENDPOINT_ENV))
+                || isSet(environment.getProperty(OTEL_ENDPOINT_ENV));
+    }
+
+    private static boolean isSet(String value) {
+        return value != null && !value.isBlank();
     }
 
     /**

@@ -87,7 +87,10 @@ management:
   otlp:
     tracing:
       endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4317}}
-      transport: ${OTEL_EXPORTER_OTLP_PROTOCOL:grpc}
+      # grpc default. OTEL_EXPORTER_OTLP_PROTOCOL (grpc|http/protobuf|http/json) is translated to
+      # this enum (GRPC|HTTP) by FireflyObservabilityEnvironmentPostProcessor — binding the raw
+      # spec value here would fail to bind http/protobuf and crash context init.
+      transport: grpc
     metrics:
       export:
         enabled: false                   # Overridden by EnvironmentPostProcessor based on exporter property
