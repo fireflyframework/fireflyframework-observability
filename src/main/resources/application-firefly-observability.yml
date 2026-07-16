@@ -66,6 +66,16 @@ management:
   metrics:
     tags:
       application: ${spring.application.name:unknown}
+    ## Histogram buckets (le) for firefly.* timers/summaries — DEFAULT OFF.
+    ## When enabled, p99 becomes aggregable across pods (histogram_quantile()) and it
+    ## is the prerequisite for metric→trace exemplars, at the cost of extra series
+    ## cardinality per timer. Ships inert; platform flips it on when the cardinality
+    ## budget is approved: FIREFLY_OBSERVABILITY_METRICS_HISTOGRAMS_ENABLED=true.
+    ## Applies a Micrometer MeterFilter to every meter whose name starts with "firefly";
+    ## the existing client-side publishPercentiles are unaffected.
+    distribution:
+      percentiles-histogram:
+        firefly: ${FIREFLY_OBSERVABILITY_METRICS_HISTOGRAMS_ENABLED:false}
   tracing:
     enabled: ${firefly.observability.tracing.enabled:true}
     sampling:
