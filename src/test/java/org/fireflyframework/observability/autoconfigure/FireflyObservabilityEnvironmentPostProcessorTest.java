@@ -111,6 +111,70 @@ class FireflyObservabilityEnvironmentPostProcessorTest {
     }
 
     @Test
+    void otlpProtocolHttpProtobufTranslatesToHttpTransport() {
+        MockEnvironment environment = new MockEnvironment();
+        // The OTel-spec value that previously crashed context init by binding straight to the enum.
+        environment.setProperty("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf");
+
+        processor.postProcessEnvironment(environment, new SpringApplication());
+
+        assertThat(environment.getProperty("management.otlp.tracing.transport"))
+                .as("http/protobuf must map to the HTTP transport enum, not the raw spec value")
+                .isEqualTo("http");
+        assertThat(environment.getProperty("management.otlp.tracing.endpoint"))
+                .as("HTTP transport must move off the gRPC :4317 port to the :4318 /v1/traces path")
+                .isEqualTo("http://localhost:4318/v1/traces");
+    }
+
+    @Test
+    void otlpProtocolHttpJsonAlsoTranslatesToHttpTransport() {
+        MockEnvironment environment = new MockEnvironment();
+        environment.setProperty("OTEL_EXPORTER_OTLP_PROTOCOL", "http/json");
+
+        processor.postProcessEnvironment(environment, new SpringApplication());
+
+        assertThat(environment.getProperty("management.otlp.tracing.transport")).isEqualTo("http");
+    }
+
+    @Test
+    void otlpProtocolGrpcKeepsGrpcTransportAndPort() {
+        MockEnvironment environment = new MockEnvironment();
+        environment.setProperty("OTEL_EXPORTER_OTLP_PROTOCOL", "grpc");
+
+        processor.postProcessEnvironment(environment, new SpringApplication());
+
+        assertThat(environment.getProperty("management.otlp.tracing.transport")).isEqualTo("grpc");
+        assertThat(environment.getProperty("management.otlp.tracing.endpoint"))
+                .as("gRPC must keep the default :4317 endpoint")
+                .isEqualTo("http://localhost:4317");
+    }
+
+    @Test
+    void otlpProtocolUnsetLeavesGrpcDefault() {
+        MockEnvironment environment = new MockEnvironment();
+
+        processor.postProcessEnvironment(environment, new SpringApplication());
+
+        assertThat(environment.getProperty("management.otlp.tracing.transport"))
+                .as("No OTel protocol override means the YAML grpc default stands")
+                .isEqualTo("grpc");
+    }
+
+    @Test
+    void explicitOtlpEndpointIsRespectedWhenSwitchingToHttp() {
+        MockEnvironment environment = new MockEnvironment();
+        environment.setProperty("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf");
+        environment.setProperty("OTEL_EXPORTER_OTLP_ENDPOINT", "http://collector.monitoring:4318");
+
+        processor.postProcessEnvironment(environment, new SpringApplication());
+
+        assertThat(environment.getProperty("management.otlp.tracing.transport")).isEqualTo("http");
+        assertThat(environment.getProperty("management.otlp.tracing.endpoint"))
+                .as("An explicit endpoint must win over the derived HTTP default")
+                .isEqualTo("http://collector.monitoring:4318");
+    }
+
+    @Test
     void defaultsLoadingIsIdempotent() {
         MockEnvironment environment = new MockEnvironment();
         MutablePropertySources sources = environment.getPropertySources();
